@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: reactive-telemetry-postgres
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: telemetry
+    ports:
+      # 5432 was free on this machine when the project was written. If it is not,
+      # publish elsewhere and change spring.r2dbc.url and spring.datasource.url
+      # together - the two drivers point at the same database.
+      - "5432:5432"
+    # max_connections is left at the default. The connection pool, not the thread
+    # model, is the ceiling on every database-bound endpoint here, and the README
+    # measures exactly that.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemetry -d telemetry"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

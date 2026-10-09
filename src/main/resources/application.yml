@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: reactive-telemetry
+
+  main:
+    # The switch the whole project exists to compare. Both starters are on the
+    # classpath, and with both present Spring Boot defaults to servlet - so the
+    # reactive side has to be named, not assumed. The "blocking" profile sets it
+    # back to servlet.
+    web-application-type: reactive
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/telemetry
+    username: telemetry
+    password: telemetry
+    pool:
+      enabled: true
+      # Deliberately small and deliberately visible in the README: the reactive
+      # stack removes the thread as the scarce resource, not the connection. On
+      # a database-bound endpoint this number is the ceiling for both stacks.
+      initial-size: 5
+      max-size: 10
+      max-acquire-time: 10s
+
+  datasource:
+    # The same database through the blocking driver. Flyway needs it, and so does
+    # the blocking half of the comparison.
+    url: jdbc:postgresql://localhost:5432/telemetry
+    username: telemetry
+    password: telemetry
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 10000
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+  tomcat:
+    threads:
+      # The blocking baseline. Explicit so the two configurations differ in one
+      # named value instead of in a framework default.
+      max: 200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+
+telemetry:
+  downstream:
+    # The slow dependency every "waiting" endpoint calls. Simulated in-process so
+    # the measurement is about the stack and not about a second service's own
+    # thread model.
+    default-delay-ms: 500
+
+logging:
+  pattern:
+    # The request id only reaches this pattern if the reactive Context was
+    # bridged to MDC. It is blank on purpose when it was not - the trap is
+    # supposed to be visible in the log, not hidden by a fallback.
+    level: "%5p [%X{requestId:-}]"
+  level:
+    com.gkcontas.reactive: INFO
+
+---
+spring:
+  config:
+    activate:
+      on-profile: blocking
+  main:
+    web-application-type: servlet
