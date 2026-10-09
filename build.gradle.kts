@@ -76,3 +76,29 @@ tasks.withType<Test> {
     jvmArgs("-XX:+AllowRedefinitionToAddDeleteMethods")
 }
 
+// BlockHound instruments the JVM, not a test class, and it cannot be
+// uninstalled. Sharing a JVM with the integration suite poisons it: the trap
+// endpoints block on purpose, and r2dbc-postgresql blocks on the event loop
+// while authenticating, so every reactive test that opens a connection fails
+// with a BlockingOperationError instead of its own assertion.
+//
+// So the BlockHound tests get a JVM of their own. This is the trade-off the
+// tool comes with, and the reason it belongs in CI as a separate job rather
+// than mixed into the suite.
+val blockHoundTest = tasks.register<Test>("blockHoundTest") {
+    description = "Runs the BlockHound tests in an isolated JVM"
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    jvmArgs("-XX:+AllowRedefinitionToAddDeleteMethods")
+    filter { includeTestsMatching("*BlockHound*") }
+}
+
+tasks.named<Test>("test") {
+    filter { excludeTestsMatching("*BlockHound*") }
+}
+
+tasks.named("check") {
+    dependsOn(blockHoundTest)
+}
